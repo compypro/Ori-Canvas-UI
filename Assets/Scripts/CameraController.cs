@@ -1,8 +1,13 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-public class CameraController : MonoBehaviour
+public class CameraController : Singleton<CameraController>
 {
-    private bool dragging = false;
+    private InputAction pressAction;
+    private InputAction pointAction;
+    private InputAction scrollAction;
+
+    public bool dragging { private set; get; } = false;
     private Vector3 dragOrigin;
     private Vector3 dragDiff;
 
@@ -10,16 +15,29 @@ public class CameraController : MonoBehaviour
     public float minZoom = 2f;
     public float maxZoom = 30f;
 
+    private void Start()
+    {
+        pressAction = InputSystem.actions.FindAction("Click");
+        pointAction = InputSystem.actions.FindAction("Point");
+        scrollAction = InputSystem.actions.FindAction("ScrollWheel");
+    }
+
     private void LateUpdate()
     {
-        if (Input.GetMouseButton(0))
+        if(pressAction.WasPressedThisFrame())
         {
-            dragDiff = Camera.main.ScreenToWorldPoint(Input.mousePosition) - Camera.main.transform.position;
+            Vector3 cursorPosition = Camera.main.ScreenToWorldPoint(pointAction.ReadValue<Vector2>());
+            dragOrigin = cursorPosition;
+        }
 
-            if (!dragging)
+        if (pressAction.IsPressed())
+        {
+            Vector3 cursorPosition = Camera.main.ScreenToWorldPoint(pointAction.ReadValue<Vector2>());
+            dragDiff = cursorPosition - Camera.main.transform.position;
+
+            if (!dragging && !EditorController.Instance.dragging && Mathf.Abs((dragOrigin - Camera.main.transform.position - dragDiff).sqrMagnitude) >= 0.01f)
             {
                 dragging = true;
-                dragOrigin = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             }
         }
         else
@@ -30,8 +48,14 @@ public class CameraController : MonoBehaviour
         if (dragging)
         {
             Camera.main.transform.position = dragOrigin - dragDiff;
+            GridManager.Instance.UpdateGrid();
         }
 
-        Camera.main.orthographicSize = Mathf.Max(minZoom, Mathf.Min(Camera.main.orthographicSize - Input.mouseScrollDelta.y * zoomPower, maxZoom));
+        float newOrthographicSize = Mathf.Max(minZoom, Mathf.Min(Camera.main.orthographicSize - scrollAction.ReadValue<Vector2>().y * zoomPower, maxZoom));
+        if(newOrthographicSize != Camera.main.orthographicSize)
+        {
+            Camera.main.orthographicSize = newOrthographicSize;
+            GridManager.Instance.UpdateGrid();
+        }
     }
 }
